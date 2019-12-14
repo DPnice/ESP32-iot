@@ -6,21 +6,16 @@
 ************************************************************/
 
 #include <WiFi.h>
-
+#include <SimpleDHT.h>
 //FreeRTOS是一个迷你的实时操作系统内核
 extern "C" {
 	#include "freertos/FreeRTOS.h"
 	#include "freertos/timers.h"
 }
 #include <AsyncMqttClient.h>
-//#include "HTU3X.h"
 
-// Change the credentials below, so your ESP32 connects to your router
-//#define WIFI_SSID "TP-LINK_4CDF"
-//#define WIFI_PASSWORD "an123456"
-
-// Change the MQTT_HOST variable to your IP address,
-#define MQTT_HOST IPAddress(49, xx, xx, 191)
+// Change the MQTT_HOST variable to your IP address
+#define MQTT_HOST IPAddress(49, 233, 131, 191)
 #define MQTT_PORT 1883
 
 // Create objects to handle MQTT client
@@ -28,18 +23,21 @@ AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
 
+//温度湿度 for DHT11
+//      VCC: 5V or 3V
+//      GND: GND
+//      DATA: 2
+int pinDHT11 = 2;
+SimpleDHT11 dht11(pinDHT11);
 
-String temperatureString = "";      // Variable to hold the temperature reading 保持温度读数的变量
+String temperatureString = "";   // Variable to hold the temperature reading 保持温度读数的变量
 unsigned long previousMillis = 0;   // Stores last time temperature was published 存储上次发布温度的时间
 const long interval = 5000;        // interval at which to publish sensor readings 发布传感器读数的间隔
 
 int retryCount = 6;//wifi重试次数 重试失败进行智能配网
 
-
 void connectToWifi() {
 	//自动配网
-//	Serial.println("Connecting to Wi-Fi...");
-//	WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 	autoConfig();
 }
 
@@ -195,8 +193,8 @@ void setup() {
 	
 	WiFi.onEvent(WiFiEvent);
 	
-	//	湿度
-	//        myHumidity.begin();
+	//湿度
+	//myHumidity.begin();
 	
 	mqttClient.onConnect(onMqttConnect);
 	mqttClient.onDisconnect(onMqttDisconnect);
@@ -207,6 +205,7 @@ void setup() {
 	mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 	//必须先连接wifi才能触发onEvent
 	connectToWifi();
+	
 }
 
 void loop() {
@@ -219,17 +218,26 @@ void loop() {
 			// Save the last time a new reading was published
 			previousMillis = currentMillis;
 			// New temperature readings
-			float humd, temp;
-			//todo 读取温度湿度
-			//                myHumidity.readTempAndHumi(&temp, &humd);
+			byte temperature, humidity;
+			int err = SimpleDHTErrSuccess;
 			
-			//temperatureString = " " + String(temp) + "C " + String(32 + humd * 1.8) +"F";
-			temperatureString ="23,50";
+			//读取温度湿度
+			if ((err = dht11.read(&temperature, &humidity, NULL)) != SimpleDHTErrSuccess) {
+				Serial.print("Read DHT11 failed, err=");
+				Serial.println(err);
+				return;
+			}
+			Serial.print("Sample OK: ");
+			Serial.print((int)temperature); Serial.print(" *C, ");
+			Serial.print((int)humidity); Serial.println(" H");
+			
+			//温度 湿度 水量
+			temperatureString = String(temperature)+","+String(humidity)+","+"0";
 			Serial.println(temperatureString);
 			//发布温度湿度 消息质量 2 刚好一次
-			// Publish an MQTT message on topic esp32/t&h with Celsius and Fahrenheit temperature readings
-			uint16_t packetIdPub2 = mqttClient.publish("esp32/t&h", 2, true, temperatureString.c_str());
-			Serial.print("Publishing on topic esp32/t&h at QoS 2, packetId: ");
+			//Publish an MQTT message on topic esp32/t&h&w with Celsius and Fahrenheit temperature readings
+			uint16_t packetIdPub2 = mqttClient.publish("esp32/t&h&w", 2, true, temperatureString.c_str());
+			Serial.print("Publishing on topic esp32/t&h&w at QoS 2, packetId: ");
 			Serial.println(packetIdPub2);
 		}
 	}
