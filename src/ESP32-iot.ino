@@ -7,6 +7,8 @@
 
 #include <WiFi.h>
 #include <SimpleDHT.h>
+#include "Servo.h"
+
 //FreeRTOS是一个迷你的实时操作系统内核
 extern "C" {
 	#include "freertos/FreeRTOS.h"
@@ -22,6 +24,11 @@ extern "C" {
 AsyncMqttClient mqttClient;
 TimerHandle_t mqttReconnectTimer;
 TimerHandle_t wifiReconnectTimer;
+
+//舵机 SG90
+Servo myservo;
+// GPIO the servo is attached to
+static const int servoPin = 13;
 
 //温度湿度 for DHT11
 //      VCC: 5V or 3V
@@ -161,6 +168,10 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
 	if (strcmp(topic, "esp32/feed") == 0) {
 		//todo 执行投食
 		Serial.println("执行投食");
+		myservo.write(75);
+		delay(500);
+		myservo.write(0);
+		
 	}
 	
 	Serial.println("Publish received.");
@@ -205,6 +216,9 @@ void setup() {
 	mqttClient.setServer(MQTT_HOST, MQTT_PORT);
 	//必须先连接wifi才能触发onEvent
 	connectToWifi();
+	//初始化舵机
+	myservo.attach(servoPin);
+	Serial.println("启动完成");
 	
 }
 
@@ -232,7 +246,7 @@ void loop() {
 			Serial.print((int)humidity); Serial.println(" H");
 			
 			//温度 湿度 水量
-			temperatureString = String(temperature)+","+String(humidity)+","+"0";
+			temperatureString = String(temperature)+","+String(humidity)+","+"30";
 			Serial.println(temperatureString);
 			//发布温度湿度 消息质量 2 刚好一次
 			//Publish an MQTT message on topic esp32/t&h&w with Celsius and Fahrenheit temperature readings
