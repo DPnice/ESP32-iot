@@ -37,6 +37,9 @@ static const int servoPin = 13;
 int pinDHT11 = 2;
 SimpleDHT11 dht11(pinDHT11);
 
+int pumpin = 16;//续电器引脚 低电平触发
+int isOpen = 0;//加湿器是否开启 0关闭
+
 String temperatureString = "";   // Variable to hold the temperature reading 保持温度读数的变量
 unsigned long previousMillis = 0;   // Stores last time temperature was published 存储上次发布温度的时间
 const long interval = 5000;        // interval at which to publish sensor readings 发布传感器读数的间隔
@@ -127,6 +130,10 @@ void onMqttConnect(bool sessionPresent) {
 	uint16_t packetIdSub = mqttClient.subscribe("esp32/feed", 0);
 	Serial.print("Subscribing to esp32/feed at QoS 0, packetId: ");
 	Serial.println(packetIdSub);
+	
+	uint16_t packetIdSub1 = mqttClient.subscribe("esp32/led", 0);
+	Serial.print("Subscribing to esp32/led at QoS 0, packetId: ");
+	Serial.println(packetIdSub1);
 }
 
 void onMqttDisconnect(AsyncMqttClientDisconnectReason reason) {
@@ -166,12 +173,24 @@ void onMqttMessage(char* topic, char* payload, AsyncMqttClientMessageProperties 
 	}
 	// topic 是否是舵机
 	if (strcmp(topic, "esp32/feed") == 0) {
-		//todo 执行投食
+		//执行投食
 		Serial.println("执行投食");
 		myservo.write(75);
 		delay(500);
 		myservo.write(0);
+
 		
+	}
+	
+	if (strcmp(topic, "esp32/led") == 0) {
+		//加湿器亮灯
+		//判断继电器是否开启状态
+		int isHigh = digitalRead(pumpin);
+		if(isHigh == HIGH){
+			digitalWrite(pumpin,LOW);//打开/关闭led
+			delay(3000);//3秒打开led
+			digitalWrite(pumpin,HIGH);
+		}
 	}
 	
 	Serial.println("Publish received.");
@@ -204,9 +223,6 @@ void setup() {
 	
 	WiFi.onEvent(WiFiEvent);
 	
-	//湿度
-	//myHumidity.begin();
-	
 	mqttClient.onConnect(onMqttConnect);
 	mqttClient.onDisconnect(onMqttDisconnect);
 	mqttClient.onSubscribe(onMqttSubscribe);
@@ -218,6 +234,9 @@ void setup() {
 	connectToWifi();
 	//初始化舵机
 	myservo.attach(servoPin);
+	//设置继电器
+	pinMode(pumpin,OUTPUT);
+	digitalWrite(pumpin,HIGH);//加湿器关闭
 	Serial.println("启动完成");
 	
 }
@@ -246,14 +265,38 @@ void loop() {
 			Serial.print((int)humidity); Serial.println(" H");
 			
 			//温度 湿度 水量
-			temperatureString = String(temperature)+","+String(humidity)+","+"30";
+			temperatureString = String(temperature)+","+String(humidity)+","+"100";
 			Serial.println(temperatureString);
 			//发布温度湿度 消息质量 2 刚好一次
 			//Publish an MQTT message on topic esp32/t&h&w with Celsius and Fahrenheit temperature readings
-			uint16_t packetIdPub2 = mqttClient.publish("esp32/t&h&w", 2, true, temperatureString.c_str());
-			Serial.print("Publishing on topic esp32/t&h&w at QoS 2, packetId: ");
+			uint16_t packetIdPub2 = mqttClient.publish("esp32-test/t&h&w", 2, true, temperatureString.c_str());
+			Serial.print("Publishing on topic esp32-test/t&h&w at QoS 2, packetId: ");
 			Serial.println(packetIdPub2);
+			
+			if((int)humidity<50){
+				if(isOpen == 0){
+					Serial.println("打开加湿器");
+					digitalWrite(pumpin,LOW);//打开加湿器
+					delay(1000);//持续1s
+					digitalWrite(pumpin,HIGH);
+					isOpen=1;
+				}
+				
+			}else{
+				if(isOpen == 1){
+					Serial.println("关闭加湿器");
+					digitalWrite(pumpin,LOW);
+					delay(1000);
+					digitalWrite(pumpin,HIGH);//两次关闭
+					delay(500);
+					digitalWrite(pumpin,LOW);
+					delay(1000);
+					digitalWrite(pumpin,HIGH);
+					
+					isOpen=0;
+				}
+			}
 		}
+		
 	}
-	
 }
