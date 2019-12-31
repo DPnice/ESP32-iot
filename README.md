@@ -21,6 +21,9 @@
 
 ![image](https://raw.githubusercontent.com/DPnice/ESP32-iot/master/doc/image/%E6%95%88%E6%9E%9C%E5%9B%BE.jpg)
 
+### SmartConfig一键配网：
+
+![image](https://raw.githubusercontent.com/DPnice/ESP32-iot/master/doc/image/esp-touch.jpg)
 ### 视频演示：
 
 [视频演示](https://www.dpnice.online/demo.html)
